@@ -1,4 +1,5 @@
 # https://projects.raspberrypi.org/en/projects/get-started-pico-w/2 
+from XRPLib.defaults import *
 import network
 import machine
 import struct
@@ -9,15 +10,17 @@ from machine import Pin
 import usocket as socket
 import ujson
 
-from XRPLib.defaults import *
+
+from STEM_Embassy.SecondColor import TCS34725
+
 
 print("* Starting up ")
 
 # VARS ------------------------------------------------------
-ssid = "LiCe"
-password ="12061206"
+ssid = "Googoo"
+password ="wificroes"
 
-wsHost = "192.168.0.13"
+wsHost = "192.168.86.27"
 wsPort = 8080
 wsPath = "/ws"
 
@@ -28,6 +31,11 @@ last_ping_sent = 0
 last_pong_received = 0
 ping_interval = 15  # seconds, should match server's ping interval
 pong_timeout = 20   # seconds, max time to wait for a pong response
+
+
+sensor = TCS34725()
+sensor.set_integration_time (24)
+sensor.set_gain(4)
 
 # GENERAL FUNCS ----------------------------------------------
 def cleanup():
@@ -282,12 +290,12 @@ def setServo(angle):
 try:
     if not connect():
         print("* WiFi setup failed")
-        time.sleep(5)
+        sleep(5)
         cleanup()
         
     if not wsConnect():
         print("* WebSocket setup failed")
-        time.sleep(5)
+        sleep(5)
         cleanup()
 
     print("* Setup complete, entering main loop")
@@ -300,28 +308,29 @@ try:
 
     # MAIN LOOP -----------------------------------------------------------    
     while True:
-        # Process WebSocket communications
-        if not handle_websocket():
-            print("* Connection lost, attempting to reconnect")
-            ws.close()
-            if not wsConnect():
-                print("* Reconnection failed")
-                break
-            last_ping_sent = time.time()
-            last_pong_received = time.time()
-            continue
+        r,g,b,c =  sensor.read_rgbc()
+        print("red: ",r,"green: ",g,"blue: ",b, "c?: ",c)
+        time.sleep(3)
+        # # Process WebSocket communications
+        # if not handle_websocket():
+        #     print("* Connection lost, attempting to reconnect")
+        #     ws.close()
+        #     if not wsConnect():
+        #         print("* Reconnection failed")
+        #         break
+        #     last_ping_sent = time.time()
+        #     last_pong_received = time.time()
+        #     continue
         
-        # Send test message periodically
-        current_time = time.time()
-        if current_time - last_message_time > message_interval:
-            if send_message("Testing this from pi"):
-                last_message_time = current_time
-            else:
-                print("* Failed to send message")
-                break
+        # # Send test message periodically
+        # current_time = time.time()
+        # if current_time - last_message_time > message_interval:
+        #     if send_message("Testing this from pi"):
+        #         last_message_time = current_time
+        #     else:
+        #         print("* Failed to send message")
+        #         break
         
-        # Small delay to prevent tight loop
-        sleep(0.1)
         
 except KeyboardInterrupt:
     print("* Connection stopped by user")
