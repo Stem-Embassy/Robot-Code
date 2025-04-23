@@ -15,10 +15,10 @@ from STEM_Embassy.TSEwebsocket import WebSocketClient
 print("* Starting up ")
 
 # VARS ------------------------------------------------------
-ssid = ""
-password =""
+ssid = "TP-LINK_1F4A"
+password ="36505401"
 
-wsHost = "192.168.86.248"
+wsHost = "192.168.0.159"
 wsPort = 8080
 wsPath = "/ws"
 
@@ -112,8 +112,7 @@ try:
     # MAIN LOOP -----------------------------------------------------------    
     while True:
         message = ws.handle_websocket()
-
-        print(message)
+        
         if message is False:
             print("* Connection issue detected, cleaning up")
             cleanup()
