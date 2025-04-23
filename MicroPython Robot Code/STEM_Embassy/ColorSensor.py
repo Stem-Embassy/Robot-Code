@@ -1,199 +1,304 @@
+"""
+TCS34725 Color Sensor Driver for MicroPython
+Based on Adafruit's TCS34725 driver
+"""
+
 import time
 import ustruct
 from machine import Pin, I2C
 
-#const = lambda x:x
-
+# TCS34725 Command Register
 _COMMAND_BIT = const(0x80)
 
+# TCS34725 Registers
 _REGISTER_ENABLE = const(0x00)
 _REGISTER_ATIME = const(0x01)
-
+_REGISTER_WTIME = const(0x03)
 _REGISTER_AILT = const(0x04)
 _REGISTER_AIHT = const(0x06)
-
+_REGISTER_APERS = const(0x0C)
+_REGISTER_CONFIG = const(0x0D)
+_REGISTER_CONTROL = const(0x0F)
 _REGISTER_ID = const(0x12)
-
-_REGISTER_APERS = const(0x0c)
-
-_REGISTER_CONTROL = const(0x0f)
-
-_REGISTER_SENSORID = const(0x12)
-
 _REGISTER_STATUS = const(0x13)
-_REGISTER_CDATA = const(0x14)
-_REGISTER_RDATA = const(0x16)
-_REGISTER_GDATA = const(0x18)
-_REGISTER_BDATA = const(0x1a)
+_REGISTER_CDATAL = const(0x14)  # Clear channel data
+_REGISTER_RDATAL = const(0x16)  # Red channel data
+_REGISTER_GDATAL = const(0x18)  # Green channel data
+_REGISTER_BDATAL = const(0x1A)  # Blue channel data
 
-_ENABLE_AIEN = const(0x10)
-_ENABLE_WEN = const(0x08)
-_ENABLE_AEN = const(0x02)
-_ENABLE_PON = const(0x01)
+# Enable Register Bits
+_ENABLE_AIEN = const(0x10)   # RGBC Interrupt Enable
+_ENABLE_WEN = const(0x08)    # Wait enable
+_ENABLE_AEN = const(0x02)    # RGBC Enable
+_ENABLE_PON = const(0x01)    # Power on
+
+# Status Register Bits
+_AVALID = const(0x01)        # RGBC data is valid
+
+# Integration time settings (ms)
+_INTEGRATION_TIME_2_4MS = const(0xFF)   # 2.4ms - 1 cycle
+_INTEGRATION_TIME_24MS = const(0xF6)    # 24ms  - 10 cycles
+_INTEGRATION_TIME_101MS = const(0xD5)   # 101ms - 42 cycles
+_INTEGRATION_TIME_154MS = const(0xC0)   # 154ms - 64 cycles
+_INTEGRATION_TIME_700MS = const(0x00)   # 700ms - 256 cycles
+
+# Gain settings
+_GAIN_1X = const(0x00)
+_GAIN_4X = const(0x01)
+_GAIN_16X = const(0x02)
+_GAIN_60X = const(0x03)
 
 _GAINS = (1, 4, 16, 60)
 _CYCLES = (0, 1, 2, 3, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60)
 
 
-class ColorSensor:
-    def __init__(self, address=0x29):
-        self.i2c = I2C(0, scl=Pin(25), sda=Pin(24), freq=400000)
+class TCS34725:
+    """Driver for the TCS34725 color sensor."""
+    
+    def __init__(self, i2c=None, address=0x29):
+        """Initialize the TCS34725 sensor.
+        
+        Args:
+            i2c: I2C bus instance. If None, default pins will be used.
+            address: I2C address of the sensor (default 0x29)
+        """
+        if i2c is None:
+            self.i2c = I2C(0, scl=Pin(21), sda=Pin(20), freq=400000)
+        else:
+            self.i2c = i2c
+            
         self.address = address
         self._active = False
-        self.integration_time(2.4)
+        
+        # Check sensor ID
         sensor_id = self.sensor_id()
         if sensor_id not in (0x44, 0x10):
-            raise RuntimeError("wrong sensor id 0x{:x}".format(sensor_id))
-
-    def _register8(self, register, value=None):
-        register |= _COMMAND_BIT
-        if value is None:
-            try:
-                return self.i2c.readfrom_mem(self.address, register, 1)[0]
-            except:
-                return 0  # Return default value if reading fails
-        data = ustruct.pack('<B', value)
-        self.i2c.writeto_mem(self.address, register, data)
-
-    def _register16(self, register, value=None):
-        register |= _COMMAND_BIT
-        if value is None:
-            try:
-                data = self.i2c.readfrom_mem(self.address, register, 2)
-                return ustruct.unpack('<H', data)[0]
-            except:
-                return 0  # Return default value if reading fails
-        data = ustruct.pack('<H', value)
-        self.i2c.writeto_mem(self.address, register, data)
-
-    def active(self, value=None):
-        if value is None:
-            return self._active
-        value = bool(value)
-        if self._active == value:
-            return
-        self._active = value
-        enable = self._register8(_REGISTER_ENABLE)
+            raise RuntimeError(f"Wrong sensor ID: 0x{sensor_id:02x}")
         
-        # Ensure enable is not None
-        if enable is None:
-            enable = 0
+        # Initialize sensor with default settings
+        self.set_integration_time(24)
+        self.set_gain(4)
+        self.active(True)
+
+    def _write_register(self, register, value):
+        """Write a byte to the specified register."""
+        self.i2c.writeto_mem(self.address, register | _COMMAND_BIT, bytes([value]))
+
+    def _read_register(self, register):
+        """Read a byte from the specified register."""
+        return self.i2c.readfrom_mem(self.address, register | _COMMAND_BIT, 1)[0]
+
+    def _read_word(self, register):
+        """Read a 16-bit word from the specified register."""
+        data = self.i2c.readfrom_mem(self.address, register | _COMMAND_BIT, 2)
+        return ustruct.unpack('<H', data)[0]
+
+    def active(self, state=None):
+        """Activate or deactivate the sensor.
+        
+        Args:
+            state: True to activate, False to deactivate, None to get current state
             
-        if value:
-            self._register8(_REGISTER_ENABLE, enable | _ENABLE_PON)
+        Returns:
+            Current active state if state is None
+        """
+        if state is None:
+            return self._active
+        
+        enable = self._read_register(_REGISTER_ENABLE)
+        
+        if state:
+            self._write_register(_REGISTER_ENABLE, enable | _ENABLE_PON)
             time.sleep_ms(3)
-            self._register8(_REGISTER_ENABLE,
-                enable | _ENABLE_PON | _ENABLE_AEN)
+            self._write_register(_REGISTER_ENABLE, enable | _ENABLE_PON | _ENABLE_AEN)
+            self._active = True
         else:
-            self._register8(_REGISTER_ENABLE,
-                enable & ~(_ENABLE_PON | _ENABLE_AEN))
+            self._write_register(_REGISTER_ENABLE, enable & ~(_ENABLE_PON | _ENABLE_AEN))
+            self._active = False
 
     def sensor_id(self):
-        return self._register8(_REGISTER_SENSORID)
+        """Read the sensor ID."""
+        return self._read_register(_REGISTER_ID)
 
-    def integration_time(self, value=None):
-        if value is None:
-            return self._integration_time
-        value = min(614.4, max(2.4, value))
-        cycles = int(value / 2.4)
-        self._integration_time = cycles * 2.4
-        return self._register8(_REGISTER_ATIME, 256 - cycles)
+    def set_integration_time(self, value_ms):
+        """Set integration time in milliseconds.
+        
+        Args:
+            value_ms: Integration time in milliseconds (2.4-700)
+        """
+        if value_ms <= 2.4:
+            atime = _INTEGRATION_TIME_2_4MS
+            self._integration_time = 2.4
+        elif value_ms <= 24:
+            atime = _INTEGRATION_TIME_24MS
+            self._integration_time = 24
+        elif value_ms <= 101:
+            atime = _INTEGRATION_TIME_101MS
+            self._integration_time = 101
+        elif value_ms <= 154:
+            atime = _INTEGRATION_TIME_154MS
+            self._integration_time = 154
+        else:
+            atime = _INTEGRATION_TIME_700MS
+            self._integration_time = 700
+            
+        self._write_register(_REGISTER_ATIME, atime)
 
-    def gain(self, value):
-        if value is None:
-            control_reg = self._register8(_REGISTER_CONTROL)
-            if control_reg is None:
-                return _GAINS[0]  # Default to first gain value
-            return _GAINS[control_reg]
-        if value not in _GAINS:
-            raise ValueError("gain must be 1, 4, 16 or 60")
-        return self._register8(_REGISTER_CONTROL, _GAINS.index(value))
+    def set_gain(self, gain):
+        """Set sensor gain.
+        
+        Args:
+            gain: 1, 4, 16, or 60
+        """
+        if gain not in _GAINS:
+            raise ValueError("Gain must be 1, 4, 16, or 60")
+        
+        control = _GAINS.index(gain)
+        self._write_register(_REGISTER_CONTROL, control)
+        self._gain = gain
 
-    def _valid(self):
-        status = self._register8(_REGISTER_STATUS)
-        if status is None:
-            return False
-        return bool(status & 0x01)
+    def _data_ready(self):
+        """Check if RGBC data is ready."""
+        status = self._read_register(_REGISTER_STATUS)
+        return bool(status & _AVALID)
 
-    def read(self, raw=False):
-        was_active = self.active()
-        self.active(True)
-        while not self._valid():
-            time.sleep_ms(int(self._integration_time + 0.9))
-        data = tuple(self._register16(register) for register in (
-            _REGISTER_RDATA,
-            _REGISTER_GDATA,
-            _REGISTER_BDATA,
-            _REGISTER_CDATA,
-        ))
-        self.active(was_active)
-        if raw:
-            return data
-        return self._temperature_and_lux(data)
+    def read_rgbc(self):
+        """Read red, green, blue, and clear data.
+        
+        Returns:
+            Tuple of (red, green, blue, clear) values
+        """
+        if not self._active:
+            self.active(True)
+        
+        # Wait for data to be ready
+        while not self._data_ready():
+            time.sleep_ms(int(self._integration_time) + 1)
+        
+        clear = self._read_word(_REGISTER_CDATAL)
+        red = self._read_word(_REGISTER_RDATAL)
+        green = self._read_word(_REGISTER_GDATAL)
+        blue = self._read_word(_REGISTER_BDATAL)
+        
+        return red, green, blue, clear
 
-    def _temperature_and_lux(self, data):
-        r, g, b, c = data
+    def read_color_temperature(self):
+        """Calculate color temperature and lux from RGBC data.
+        
+        Returns:
+            Tuple of (color_temperature, lux)
+        """
+        r, g, b, c = self.read_rgbc()
+        
+        if c == 0:
+            return 0, 0
+        
+        # Calculate XYZ
         x = -0.14282 * r + 1.54924 * g + -0.95641 * b
         y = -0.32466 * r + 1.57837 * g + -0.73191 * b
-        z = -0.68202 * r + 0.77073 * g +  0.56332 * b
-        d = x + y + z
-        n = (x / d - 0.3320) / (0.1858 - y / d)
+        z = -0.68202 * r + 0.77073 * g + 0.56332 * b
+        
+        # Calculate chromaticity coordinates
+        xc = x / (x + y + z)
+        yc = y / (x + y + z)
+        
+        # Calculate CCT (Correlated Color Temperature)
+        n = (xc - 0.3320) / (0.1858 - yc)
         cct = 449.0 * n**3 + 3525.0 * n**2 + 6823.3 * n + 5520.33
-        return cct, y
+        
+        # Lux calculation
+        lux = y / (self._integration_time * self._gain / 24.0)
+        
+        return cct, lux
 
-    def threshold(self, cycles=None, min_value=None, max_value=None):
-        if cycles is None and min_value is None and max_value is None:
-            min_value = self._register16(_REGISTER_AILT)
-            max_value = self._register16(_REGISTER_AIHT)  # Fixed typo - was using AILT for both
-            enable = self._register8(_REGISTER_ENABLE)
-            if enable is None:
-                enable = 0
-            if enable & _ENABLE_AIEN:
-                pers = self._register8(_REGISTER_APERS)
-                if pers is None:
-                    cycles = -1
-                else:
-                    cycles = _CYCLES[pers & 0x0f]
-            else:
-                cycles = -1
-            return cycles, min_value, max_value
-        if min_value is not None:
-            self._register16(_REGISTER_AILT, min_value)
-        if max_value is not None:
-            self._register16(_REGISTER_AIHT, max_value)
-        if cycles is not None:
-            enable = self._register8(_REGISTER_ENABLE)
-            if enable is None:
-                enable = 0
-            if cycles == -1:
-                self._register8(_REGISTER_ENABLE, enable & ~(_ENABLE_AIEN))
-            else:
-                self._register8(_REGISTER_ENABLE, enable | _ENABLE_AIEN)
-                if cycles not in _CYCLES:
-                    raise ValueError("invalid persistence cycles")
-                self._register8(_REGISTER_APERS, _CYCLES.index(cycles))
+    def read_rgb_normalized(self):
+        """Read RGB values normalized to 0-255 range.
+        
+        Returns:
+            Tuple of (red, green, blue) values in 0-255 range
+        """
+        r, g, b, c = self.read_rgbc()
+        
+        if c == 0:
+            return 0, 0, 0
+        
+        red = int((r / c) * 255)
+        green = int((g / c) * 255)
+        blue = int((b / c) * 255)
+        
+        return red, green, blue
 
-    def interrupt(self, value=None):
-        if value is None:
-            status = self._register8(_REGISTER_STATUS)
-            if status is None:
-                return False
-            return bool(status & _ENABLE_AIEN)
-        if value:
-            raise ValueError("interrupt can only be cleared")
-        self.i2c.writeto(self.address, b'\xe6')
+    def read_rgb_hex(self):
+        """Read RGB color as hex string.
+        
+        Returns:
+            Hex color string (e.g. "FF0000" for red)
+        """
+        r, g, b = self.read_rgb_normalized()
+        return f"{r:02x}{g:02x}{b:02x}"
+
+    def set_interrupt(self, enabled=True, persistence=0):
+        """Enable or disable interrupt.
+        
+        Args:
+            enabled: True to enable, False to disable
+            persistence: Number of consecutive values needed to trigger interrupt
+        """
+        enable = self._read_register(_REGISTER_ENABLE)
+        
+        if enabled:
+            if persistence not in _CYCLES:
+                raise ValueError("Invalid persistence value")
+            
+            self._write_register(_REGISTER_ENABLE, enable | _ENABLE_AIEN)
+            self._write_register(_REGISTER_APERS, _CYCLES.index(persistence))
+        else:
+            self._write_register(_REGISTER_ENABLE, enable & ~_ENABLE_AIEN)
+
+    def set_interrupt_limits(self, low=0, high=0xFFFF):
+        """Set interrupt thresholds.
+        
+        Args:
+            low: Low threshold (16-bit)
+            high: High threshold (16-bit)
+        """
+        self.i2c.writeto_mem(self.address, _REGISTER_AILT | _COMMAND_BIT, ustruct.pack('<H', low))
+        self.i2c.writeto_mem(self.address, _REGISTER_AIHT | _COMMAND_BIT, ustruct.pack('<H', high))
+
+    def clear_interrupt(self):
+        """Clear interrupt flag."""
+        self.i2c.writeto(self.address, b'\xE6')
+
+    def __del__(self):
+        """Cleanup when object is deleted."""
+        self.active(False)
 
 
-def html_rgb(data):
-    r, g, b, c = data
-    # Avoid division by zero
-    if c == 0:
-        return 0, 0, 0
-    red = pow((int((r/c) * 256) / 255), 2.5) * 255
-    green = pow((int((g/c) * 256) / 255), 2.5) * 255
-    blue = pow((int((b/c) * 256) / 255), 2.5) * 255
-    return red, green, blue
-
-def html_hex(data):
-    r, g, b = html_rgb(data)
-    return "{0:02x}{1:02x}{2:02x}".format(int(r),int(g),int(b))
+# Example usage:
+if __name__ == "__main__":
+    # Initialize the sensor
+    sensor = TCS34725()
+    
+    # Set integration time to 24ms and gain to 4x
+    sensor.set_integration_time(24)
+    sensor.set_gain(4)
+    
+    while True:
+        # Read RGB values
+        r, g, b, c = sensor.read_rgbc()
+        print(f"Red: {r}, Green: {g}, Blue: {b}, Clear: {c}")
+        
+        # Read color temperature and lux
+        temp, lux = sensor.read_color_temperature()
+        print(f"Color Temp: {temp:.0f}K, Lux: {lux:.2f}")
+        
+        # Read normalized RGB values
+        r_norm, g_norm, b_norm = sensor.read_rgb_normalized()
+        print(f"RGB (0-255): {r_norm}, {g_norm}, {b_norm}")
+        
+        # Read hex color
+        hex_color = sensor.read_rgb_hex()
+        print(f"Hex color: #{hex_color}")
+        
+        print("-" * 30)
+        time.sleep(1)

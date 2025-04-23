@@ -8,15 +8,15 @@ from machine import Pin
 import usocket as socket
 
 
-from STEM_Embassy.SecondColor import TCS34725
+from STEM_Embassy.ColorSensor import TCS34725
 from STEM_Embassy.TSEwebsocket import WebSocketClient
 
 
 print("* Starting up ")
 
 # VARS ------------------------------------------------------
-ssid = "Googoo"
-password ="wificroes"
+ssid = ""
+password =""
 
 wsHost = "192.168.86.248"
 wsPort = 8080
@@ -74,28 +74,10 @@ def connect():
 
 # Actuators
 def motor_control(data):
-    if(data["w"] == True):
-        #print("Moving forward")
-        drivetrain.set_effort(1, 1)
-    elif(data["s"] == True):
-        drivetrain.set_effort(-1, -1)
-    elif(data["a"] == True):
-        #print("Turning left")
-        drivetrain.set_effort(0, 1)
-    elif(data["d"] == True):    
-        #print("Turning right")
-        drivetrain.set_effort(1, 0)
-    elif(data["w"] == True and data["a"] == True):
-        drivetrain.set_effort(0.3, 1)
-    elif(data["w"] == True and data["d"] == True):
-        drivetrain.set_effort(1, 0.3)
-    elif(data["w"] == False and data["s"] == False and data["a"] == False and data["d"] == False):
-        # print("Stopping")
-        drivetrain.set_effort(0, 0)
+    pass
 
-def setServo(angle):
-    print(angle["servo"])
-    servo_one.set_angle(angle["servo"])
+def setServo(data):
+    pass
 
 # SETUP  -----------------------------------------------------------
 try:
