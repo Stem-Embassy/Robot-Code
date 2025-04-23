@@ -74,10 +74,27 @@ def connect():
 
 # Actuators
 def motor_control(data):
-    pass
+    if(data["w"] == True):
+        #print("Moving forward")
+        drivetrain.set_effort(1, 1)
+    elif(data["s"] == True):
+        drivetrain.set_effort(-1, -1)
+    elif(data["a"] == True):
+        #print("Turning left")
+        drivetrain.set_effort(0, 1)
+    elif(data["d"] == True):    
+        #print("Turning right")
+        drivetrain.set_effort(1, 0)
+    elif(data["w"] == True and data["a"] == True):
+        drivetrain.set_effort(0.3, 1)
+    elif(data["w"] == True and data["d"] == True):
+        drivetrain.set_effort(1, 0.3)
+    elif(data["w"] == False and data["s"] == False and data["a"] == False and data["d"] == False):
+        # print("Stopping")
+        drivetrain.set_effort(0, 0)
 
 def setServo(data):
-    pass
+    servo_one.set_angle(data["servo"])
 
 # SETUP  -----------------------------------------------------------
 try:

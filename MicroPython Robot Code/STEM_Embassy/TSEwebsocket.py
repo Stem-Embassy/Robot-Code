@@ -45,6 +45,9 @@ class WebSocketClient:
             print(f"* WS connection error: {e}")
             return False
 
+    def close(self):
+        self.ws.close()
+        
     def mask_payload(self, payload):
         """Generate a masking key and apply it to the payload."""
         mask_key = os.urandom(4)  # generate random 4-byte masking key
@@ -195,7 +198,7 @@ class WebSocketClient:
                     
                     # Here, we'll return the string form of the JSON data
                     # You can customize this to return specific fields from json_data
-                    return ujson.dumps(json_data)
+                    return json_data
                     
                 except ValueError as e:
                     # If JSON parsing fails, continue to next iteration
@@ -207,5 +210,6 @@ class WebSocketClient:
         
         # If no message was received but connection is fine, return None
         return None
+
 
 
