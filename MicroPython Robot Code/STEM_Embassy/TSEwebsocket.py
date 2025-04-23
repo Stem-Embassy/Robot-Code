@@ -1,50 +1,28 @@
-import network
-import machine
+import socket
 import struct
 import os
-from time import sleep
 import time
-from machine import Pin 
-import usocket as socket
+import ujson
 
 
 class WebSocketClient:
-    def __init__(self, host, port, path="/ws", ping_interval=15, pong_timeout=20):
-        self.host = host
-        self.port = port
-        self.path = path
-        self.socket = None
+    def __init__(self, host, port, path):
+        self.wsHost = host
+        self.wsPort = port
+        self.wsPath = path
+        self.ws = socket.socket()
+        self.ping_interval = 30  # seconds
+        self.pong_timeout = 10   # seconds
         self.last_ping_sent = 0
         self.last_pong_received = 0
-        self.ping_interval = ping_interval
-        self.pong_timeout = pong_timeout
-        self.connected = False
-
+        
     def connect(self):
+        """Establish WebSocket connection with handshake."""
+        self.ws.settimeout(5)
+        
         try:
-            # Close any existing socket
-            if self.socket:
-                try:
-                    self.socket.close()
-                except:
-                    pass
-                    
-            # Create a new socket
-            self.socket = socket.socket()
-            
-            # Set timeout before connection
-            try:
-                self.socket.settimeout(5.0)
-            except:
-                # If settimeout doesn't work, try alternative approach
-                try:
-                    self.socket.setblocking(False)
-                    # We'll handle timeouts manually in the receive logic
-                except:
-                    print("* Warning: Could not set socket timeout or blocking mode")
-            
-            addr = socket.getaddrinfo(self.host, self.port)[0][-1]
-            self.socket.connect(addr)
+            addr = socket.getaddrinfo(self.wsHost, self.wsPort)[0][-1]
+            self.ws.connect(addr)
 
             handshake = (
                 "GET {path} HTTP/1.1\r\n"
@@ -53,50 +31,29 @@ class WebSocketClient:
                 "Connection: Upgrade\r\n"
                 "Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==\r\n"
                 "Sec-WebSocket-Version: 13\r\n\r\n"
-            ).format(path=self.path, host=self.host, port=self.port)
-            self.socket.send(handshake)
+            ).format(path=self.wsPath, host=self.wsHost, port=self.wsPort)
+            self.ws.send(handshake)
 
-            # Read response
-            response = self.socket.recv(1024)
+            # read response
+            response = self.ws.recv(1024)
             if b"101 Switching Protocols" not in response:
                 raise Exception("websocket handshake failed")
             
             print("* WS connected!")
-            self.connected = True
-            self.last_ping_sent = time.time()
-            self.last_pong_received = time.time()
             return True
         except Exception as e:
             print(f"* WS connection error: {e}")
-            self.connected = False
-            if self.socket:
-                try:
-                    self.socket.close()
-                except:
-                    pass
-                self.socket = None
             return False
 
-    def close(self):
-        if self.socket:
-            try:
-                self.socket.close()
-            except:
-                pass
-        self.connected = False
-        self.socket = None
-
-    def _mask_payload(self, payload):
+    def mask_payload(self, payload):
         """Generate a masking key and apply it to the payload."""
         mask_key = os.urandom(4)  # generate random 4-byte masking key
         masked_payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
         return mask_key, masked_payload
 
     def send_message(self, message, opcode=0x1):
-        if not self.connected or not self.socket:
-            return False
-            
-        # Prepare the websocket frame
+        """Send a message with the specified opcode."""
+        # prepare the websocket frame
         frame = bytearray()
         frame.append(0x80 | opcode)  # FIN + opcode (0x1 for text, 0x9 for ping 0xA for pong)
         
@@ -111,121 +68,94 @@ class WebSocketClient:
         else:
             raise ValueError("message too long")
         
-        # Mask the payload
-        mask_key, masked_payload = self._mask_payload(payload)
+        # mask the payload
+        mask_key, masked_payload = self.mask_payload(payload)
         frame.extend(mask_key)  # add masking key
         frame.extend(masked_payload)  # add masked payload
         
         try:
-            self.socket.send(frame)
+            self.ws.send(frame)
             if opcode == 0x9:  # If sending ping
                 self.last_ping_sent = time.time()
-                print("* Ping sent")
+                # print("* Ping sent")
             elif opcode == 0xA:  # If sending pong
-                print("* Pong sent")
+                pass
+            elif opcode == 0x1:  # If sending text
+                pass
             return True
         except Exception as e:
             print(f"* Send error: {e}")
-            self.connected = False
             return False
 
     def receive_message(self, timeout=0.1):
-        if not self.connected or not self.socket:
-            return False
-
-        # Using a non-blocking approach with timeout handling
-        start_time = time.time()
-
+        """Receive and decode a WebSocket message."""
+        # Set a short timeout for non-blocking behavior
+        self.ws.settimeout(timeout)
+        
         try:
-            # Try to read the first byte with timeout
-            while time.time() - start_time < timeout:
-                try:
-                    # Read the first byte (FIN + opcode)
-                    data = self.socket.recv(1)
-                    if data:  # If we got data, process it
-                        break
-                except OSError as e:
-                    # Expected timeout error in non-blocking mode
-                    if e.args[0] == 11:  # EAGAIN
-                        sleep(0.01)  # Small delay to prevent tight loop
-                        continue
-                    raise  # Re-raise other errors
-
-                sleep(0.01)  # Small delay to prevent tight loop
-
-            # If we timed out waiting for data
-            if time.time() - start_time >= timeout:
-                return None
-
+            # Read the first byte (FIN + opcode)
+            data = self.ws.recv(1)
             if not data:  # Connection closed
-                self.connected = False
                 return False
-
+            
             byte1 = data[0]
             opcode = byte1 & 0x0F
 
             # Read the second byte (MASK bit + payload length)
-            data = self.socket.recv(1)
+            data = self.ws.recv(1)
             if not data:
-                self.connected = False
                 return False
-
+            
             byte2 = data[0]
             mask = byte2 & 0x80
             length = byte2 & 0x7F
 
             if length == 126:
-                length = struct.unpack(">H", self.socket.recv(2))[0]
+                length = struct.unpack(">H", self.ws.recv(2))[0]
             elif length == 127:
                 raise Exception("unsupported frame length")
-
+            
             # Read the mask key if present
             if mask:
-                mask_key = self.socket.recv(4)
+                mask_key = self.ws.recv(4)
             else:
                 mask_key = None
-
+            
             # Read the payload
-            payload = self.socket.recv(length) if length > 0 else b''
+            payload = self.ws.recv(length) if length > 0 else b''
             if mask_key and payload:
                 payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
 
             # Handle control frames
             if opcode == 0x8:  # Close frame
                 print("* Received close frame")
-                self.connected = False
                 return False
             elif opcode == 0x9:  # Ping frame
-                print("* Received ping, sending pong")
+                # print("* Received ping, sending pong")
                 self.send_message(payload, opcode=0xA)  # Send pong with the same payload
                 return None  # Continue receiving
             elif opcode == 0xA:  # Pong frame
-                print("* Received pong")
+                # print("* Received pong")
                 self.last_pong_received = time.time()
                 return None  # Continue receiving
-            elif opcode == 0x1:  # Text frame
-                return payload.decode("utf-8")  # Return the decoded text message
+            elif opcode == 0x1 or opcode == 0x2:  # Text or binary frame
+                return payload.decode("utf-8") if opcode == 0x1 else payload
             else:
                 print(f"* Unsupported opcode: {opcode}")
                 return None
-
+                
         except OSError as e:
-            # Handle various socket errors
-            if e.args[0] in (11, 110):  # EAGAIN or ETIMEDOUT
+            # Socket timeout is expected (no data available)
+            if e.args[0] == 110:  # ETIMEDOUT
                 return None
             print(f"* Receive error: {e}")
-            self.connected = False
             return False  # Indicate connection issue
         except Exception as e:
             print(f"* Unexpected receive error: {e}")
-            self.connected = False
             return False
 
     def check_connection(self):
-        if not self.connected or not self.socket:
-            return False
-            
-        # Check if we should send a ping (heartbeat)
+        """Check WebSocket connection health with ping/pong mechanism."""
         current_time = time.time()
         
         # Send ping every ping_interval
@@ -234,16 +164,21 @@ class WebSocketClient:
                 return False
         
         # Check for pong timeout
-        if self.last_ping_sent > 0 and self.last_pong_received < self.last_ping_sent and current_time - self.last_ping_sent > self.pong_timeout:
+        if (self.last_ping_sent > 0 and 
+            self.last_pong_received < self.last_ping_sent and 
+            current_time - self.last_ping_sent > self.pong_timeout):
             print("* Pong timeout - connection may be dead")
             return False
             
         return True
 
-    def handle(self):
-        if not self.connected or not self.socket:
-            return False
-            
+    def handle_websocket(self):
+        """Process incoming messages and check connection health.
+        Returns:
+            - False if connection issue
+            - String if valid JSON message received
+            - None if no message but connection is fine
+        """
         # Process any incoming messages
         for _ in range(5):  # Check a few times for any pending messages
             message = self.receive_message(timeout=0.1)
@@ -251,11 +186,26 @@ class WebSocketClient:
             if message is False:  # Connection issue
                 return False
             elif message is not None:  # Actual message received
-                print(f"* Received: {message}")
-                # You could call a callback here if you wanted
+                try:
+                    # Check if message is bytes or string and handle accordingly
+                    if isinstance(message, bytes):
+                        json_data = ujson.loads(message.decode("utf-8"))
+                    else:
+                        json_data = ujson.loads(message)
+                    
+                    # Here, we'll return the string form of the JSON data
+                    # You can customize this to return specific fields from json_data
+                    return ujson.dumps(json_data)
+                    
+                except ValueError as e:
+                    # If JSON parsing fails, continue to next iteration
+                    pass
         
         # Check connection health
         if not self.check_connection():
             return False
-            
-        return True
+        
+        # If no message was received but connection is fine, return None
+        return None
+
+
