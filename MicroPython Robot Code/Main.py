@@ -8,8 +8,8 @@ from machine import Pin
 import usocket as socket
 
 
-from STEM_Embassy.ColorSensor import TCS34725
-from STEM_Embassy.TSEwebsocket import WebSocketClient
+from ColorSensor import TCS34725
+from TSEwebsocket import WebSocketClient
 
 
 print("* Starting up ")
