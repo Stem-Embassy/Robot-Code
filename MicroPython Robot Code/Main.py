@@ -55,7 +55,6 @@ def connect():
 
     print('* Waiting for WiFi connection...')
     
-    # Adding a 30-second timeout for WiFi connection
     max_wait = 30
     while max_wait > 0:
         if wlan.isconnected():
@@ -75,22 +74,18 @@ def connect():
 # Actuators
 def motor_control(data):
     if(data["w"] == True):
-        #print("Moving forward")
         drivetrain.set_effort(1, 1)
     elif(data["s"] == True):
         drivetrain.set_effort(-1, -1)
     elif(data["a"] == True):
-        #print("Turning left")
         drivetrain.set_effort(0, 1)
     elif(data["d"] == True):    
-        #print("Turning right")
         drivetrain.set_effort(1, 0)
     elif(data["w"] == True and data["a"] == True):
         drivetrain.set_effort(0.3, 1)
     elif(data["w"] == True and data["d"] == True):
         drivetrain.set_effort(1, 0.3)
     elif(data["w"] == False and data["s"] == False and data["a"] == False and data["d"] == False):
-        # print("Stopping")
         drivetrain.set_effort(0, 0)
 
 def setServo(data):
@@ -119,6 +114,8 @@ try:
         elif message is not None:
             motor_control(message)
             setServo(message)
+            
+        #r,g,b,c =  sensor.read_rgbc()
 
         
 except KeyboardInterrupt:
