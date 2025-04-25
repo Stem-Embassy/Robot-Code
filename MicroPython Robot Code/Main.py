@@ -7,36 +7,32 @@ import time
 from machine import Pin 
 import usocket as socket
 
-
-from ColorSensor import TCS34725
-from TSEwebsocket import WebSocketClient
+from STEM_Embassy.ColorSensor import TCS34725
+from STEM_Embassy.TSEwebsocket import WebSocketClient
 
 
 print("* Starting up ")
 
 # VARS ------------------------------------------------------
-ssid = "TP-LINK_1F4A"
-password ="36505401"
+ssid = "LiCe"
+password ="12061206"
 
-wsHost = "192.168.0.159"
+wsHost = "192.168.0.13"
 wsPort = 8080
 wsPath = "/ws"
 
 pin = Pin("LED", Pin.OUT)
 
+# INITS
 ws = socket.socket()
-
-# sensor = TCS34725()
-# sensor.set_integration_time (24)
-# sensor.set_gain(4)
-
+#sensor = TCS34725()
 
 # TESTING WS LIB
 ws = WebSocketClient(wsHost, wsPort, wsPath)
 
 # GENERAL FUNCS ----------------------------------------------
 def cleanup():
-    print("Stopping and resetting everything")
+    print("Cleaning up ")
     pin.off()
     if ws:
         ws.close()
@@ -104,6 +100,8 @@ try:
         cleanup()
 
     print("* Setup complete, entering main loop")
+    print(" --------------------------------------------")
+    
     # MAIN LOOP -----------------------------------------------------------    
     while True:
         message = ws.handle_websocket()
