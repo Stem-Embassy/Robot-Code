@@ -39,10 +39,10 @@ class WebSocketClient:
             if b"101 Switching Protocols" not in response:
                 raise Exception("websocket handshake failed")
             
-            print("* WS connected!")
+          #  print("* WS connected!")
             return True
         except Exception as e:
-            print(f"* WS connection error: {e}")
+          #  print(f"* WS connection error: {e}")
             return False
 
     def close(self):
@@ -144,7 +144,7 @@ class WebSocketClient:
             elif opcode == 0x1 or opcode == 0x2:  # Text or binary frame
                 return payload.decode("utf-8") if opcode == 0x1 else payload
             else:
-                print(f"* Unsupported opcode: {opcode}")
+              #  print(f"* Unsupported opcode: {opcode}")
                 return None
                 
         except OSError as e:

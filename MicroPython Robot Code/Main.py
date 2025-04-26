@@ -15,9 +15,9 @@ try:
         sensor = TCS34725()
         sensor.set_integration_time(24)
         sensor.set_gain(4)
-        print("* Color sensor found!")
+    #  print("* Color sensor found!")
     except Exception as e:
-        print("* Color sensor not found, try installing it in the [range] pinout")
+        #  print("* Color sensor not found, try installing it in the [range] pinout")
         sensor = None
         pass
 except ImportError as e:
@@ -47,7 +47,7 @@ ws = WebSocketClient(wsHost, wsPort, wsPath)
 
 # GENERAL FUNCS ----------------------------------------------
 def cleanup():
-    print("Stopping and resetting everything")
+    #  print("Stopping and resetting everything")
     pin.off()
     if ws:
         ws.close()
@@ -62,27 +62,28 @@ def blink():
 
 # WIFI FUNCS --------------------------------------------------
 def connect():
+    wlan = None
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     wlan.connect(ssid, password)
 
-    print("* Waiting for WiFi connection...")
+    #  print("* Waiting for WiFi connection...")
 
     max_wait = 30
     while max_wait > 0:
         if wlan.isconnected():
             break
         max_wait -= 1
-        print(".", end="")
+        #  print(".", end="")
         sleep(1)
 
     if wlan.isconnected():
         blink()
-        print("\n* Wifi Connected!")
-        print(f"* IP Address: {wlan.ifconfig()[0]}")
+        #  print("\n* Wifi Connected!")
+        #  print(f"* IP Address: {wlan.ifconfig()[0]}")
         return True
     else:
-        print("\n* WiFi connection failed!")
+        #  print("\n* WiFi connection failed!")
         return False
 
 
@@ -114,7 +115,7 @@ def motor_control(data):
         else:
             drivetrain.set_effort(0, 0)
     if data["type"] == "joystick":
-        print(data)
+        #  print(data)
         # Extract joystick x and y values with default values if not present
         x = data.get("x", 0)  # Left/right; -1 = full left, 1 = full right
         y = data.get("y", 0)  # Forward/backward; -1 = full back, 1 = full forward
@@ -188,10 +189,13 @@ def send_log_message(message):
         s.close()
 
         if "200 OK" not in response:
-            print("* Health check failed")
-            return
+            #  print("* Health check failed")
+            connect()
+            # reset the wifi and then reconnect
 
-        print("* Health check passed")
+            # return
+
+        #  print("* Health check passed")
 
         # Step 2: Send log to /send-log
         payload = json.dumps({"log": message})
@@ -211,28 +215,29 @@ def send_log_message(message):
         log_response = s.recv(1024).decode()
         s.close()
 
-        print("* Log message sent. Server response:")
-        print(log_response)
+    #  print("* Log message sent. Server response:")
+    #  print(log_response)
 
     except Exception as e:
-        print(f"* Failed to send log message: {e}")
+        #  print(f"* Failed to send log message: {e}")
+        pass
 
 
 # SETUP  -----------------------------------------------------------
 try:
     if not connect():
-        print("* WiFi setup failed")
+        #  print("* WiFi setup failed")
         sleep(5)
         cleanup()
 
     if not ws.connect():
-        print("* WebSocket setup failed")
+        #  print("* WebSocket setup failed")
         sleep(5)
         cleanup()
     else:
         ws.send_message(json.dumps({"client": "Robot"}))
 
-    print("* Setup complete, entering main loop")
+    #  print("* Setup complete, entering main loop")
     blink()
     blink()
     # MAIN LOOP -----------------------------------------------------------
@@ -309,7 +314,7 @@ try:
 
                 last_color_send = current_time  # Update the last send time
             except Exception as e:
-                print(f"* Error sending color data: {e}")
+                #  print(f"* Error sending color data: {e}")
                 pass
 
         # Check if WebSocket is disconnected
@@ -358,8 +363,8 @@ try:
                 setServo(data)
             except Exception as e:
                 # get type
-                print(type(message))
-                print(f"* Error handling message: {e}")
+                #  print(type(message))
+                #  print(f"* Error handling message: {e}")
                 # print(f"* Message type: {type(message)}")
                 continue
 
