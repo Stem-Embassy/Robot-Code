@@ -174,6 +174,31 @@ class WebSocketClient:
             return False
             
         return True
+        
+    def is_connected(self):
+        """Check if the WebSocket connection is active.
+        
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        try:
+            # First check if socket is still open
+            if self.ws is None:
+                return False
+                
+            # Try a non-blocking check by setting a very short timeout
+            old_timeout = self.ws.gettimeout()
+            self.ws.settimeout(0.01)
+            
+            # Peek at the socket to see if it's still alive
+            # This is a lightweight check that doesn't actually read data
+            result = self.check_connection()
+            
+            # Restore original timeout
+            self.ws.settimeout(old_timeout)
+            return result
+        except Exception:
+            return False
 
     def handle_websocket(self):
         """Process incoming messages and check connection health.
