@@ -39,10 +39,10 @@ class WebSocketClient:
             if b"101 Switching Protocols" not in response:
                 raise Exception("websocket handshake failed")
             
-            print("* WS connected!")
+          #  print("* WS connected!")
             return True
         except Exception as e:
-            print(f"* WS connection error: {e}")
+          #  print(f"* WS connection error: {e}")
             return False
 
     def close(self):
@@ -144,7 +144,7 @@ class WebSocketClient:
             elif opcode == 0x1 or opcode == 0x2:  # Text or binary frame
                 return payload.decode("utf-8") if opcode == 0x1 else payload
             else:
-                print(f"* Unsupported opcode: {opcode}")
+              #  print(f"* Unsupported opcode: {opcode}")
                 return None
                 
         except OSError as e:
@@ -174,6 +174,31 @@ class WebSocketClient:
             return False
             
         return True
+        
+    def is_connected(self):
+        """Check if the WebSocket connection is active.
+        
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        try:
+            # First check if socket is still open
+            if self.ws is None:
+                return False
+                
+            # Try a non-blocking check by setting a very short timeout
+            old_timeout = self.ws.gettimeout()
+            self.ws.settimeout(0.01)
+            
+            # Peek at the socket to see if it's still alive
+            # This is a lightweight check that doesn't actually read data
+            result = self.check_connection()
+            
+            # Restore original timeout
+            self.ws.settimeout(old_timeout)
+            return result
+        except Exception:
+            return False
 
     def handle_websocket(self):
         """Process incoming messages and check connection health.
