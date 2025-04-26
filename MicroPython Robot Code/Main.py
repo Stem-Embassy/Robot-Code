@@ -8,6 +8,8 @@ from machine import Pin
 import usocket as socket
 import json
 
+
+
 try:
     from STEM_Embassy.ColorSensor import TCS34725
 
@@ -25,6 +27,16 @@ except ImportError as e:
     pass
 from STEM_Embassy.TSEwebsocket import WebSocketClient
 
+pin = Pin("LED", Pin.OUT)
+
+def blink():
+    print("Blinking")
+    pin.toggle()
+    sleep(0.5)
+    pin.toggle()
+blink()
+blink()
+blink()
 
 print("* Starting up ")
 
@@ -36,7 +48,7 @@ wsHost = "192.168.86.69"  # 192.168.0.159
 wsPort = 8080
 wsPath = "/ws"
 
-pin = Pin("LED", Pin.OUT)
+
 
 ws = socket.socket()
 
@@ -54,10 +66,6 @@ def cleanup():
     machine.reset()
 
 
-def blink():
-    pin.toggle()
-    sleep(0.5)
-    pin.toggle()
 
 
 # WIFI FUNCS --------------------------------------------------
@@ -378,3 +386,4 @@ except Exception as e:
 finally:
     time.sleep(5)
     cleanup()
+
