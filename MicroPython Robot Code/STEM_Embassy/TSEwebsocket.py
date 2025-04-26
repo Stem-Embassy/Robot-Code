@@ -87,7 +87,7 @@ class WebSocketClient:
                 pass
             return True
         except Exception as e:
-            print(f"* Send error: {e}")
+            #print(f"* Send error: {e}")
             return False
 
     def receive_message(self, timeout=0.1):
@@ -131,7 +131,7 @@ class WebSocketClient:
 
             # Handle control frames
             if opcode == 0x8:  # Close frame
-                print("* Received close frame")
+                #print("* Received close frame")
                 return False
             elif opcode == 0x9:  # Ping frame
                 # print("* Received ping, sending pong")
@@ -151,10 +151,10 @@ class WebSocketClient:
             # Socket timeout is expected (no data available)
             if e.args[0] == 110:  # ETIMEDOUT
                 return None
-            print(f"* Receive error: {e}")
+            #print(f"* Receive error: {e}")
             return False  # Indicate connection issue
         except Exception as e:
-            print(f"* Unexpected receive error: {e}")
+            #print(f"* Unexpected receive error: {e}")
             return False
 
     def check_connection(self):
@@ -170,7 +170,7 @@ class WebSocketClient:
         if (self.last_ping_sent > 0 and 
             self.last_pong_received < self.last_ping_sent and 
             current_time - self.last_ping_sent > self.pong_timeout):
-            print("* Pong timeout - connection may be dead")
+            #print("* Pong timeout - connection may be dead")
             return False
             
         return True
