@@ -7,17 +7,17 @@ import time
 from machine import Pin 
 import usocket as socket
 
-from STEM_Embassy.ColorSensor import TCS34725
-from STEM_Embassy.TSEwebsocket import WebSocketClient
+from ColorSensor import TCS34725
+from TSEwebsocket import WebSocketClient
 
 
 print("* Starting up ")
 
 # VARS ------------------------------------------------------
-ssid = "LiCe"
-password ="12061206"
+ssid = "Hackathon"
+password ="H@ckaTh0n"
 
-wsHost = "192.168.0.13"
+wsHost = "192.168.254.82"
 wsPort = 8080
 wsPath = "/ws"
 
@@ -49,7 +49,7 @@ def connect():
     wlan.active(True)
     wlan.connect(ssid, password)
 
-    print('* Waiting for WiFi connection...')
+    print('* Waiting for WiFi connection...', end="")
     
     max_wait = 30
     while max_wait > 0:
